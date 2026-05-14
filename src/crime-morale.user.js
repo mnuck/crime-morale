@@ -5,7 +5,7 @@
 // @author      tobytorn [1617955]
 // @match       https://www.torn.com/loader.php?sid=crimes*
 // @match       https://www.torn.com/page.php?sid=crimes*
-// @version     1.4.13
+// @version     1.4.14
 // @grant       GM_getValue
 // @grant       GM_setValue
 // @grant       unsafeWindow
