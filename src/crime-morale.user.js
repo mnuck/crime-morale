@@ -1050,8 +1050,8 @@
         return;
       }
       this.crimeOptions = document.body.getElementsByClassName('crime-option');
-      this.farmIcons = document.body.getElementsByClassName('scraperPhisher___oy1Wn');
-      this.spamOptions = document.body.getElementsByClassName('optionWithLevelRequirement___cHH35');
+      this.farmIcons = document.body.getElementsByClassName('scraperPhisher___lS7va');
+      this.spamOptions = document.body.getElementsByClassName('optionWithLevelRequirement___CojuV');
       this.virtualLists = document.body.getElementsByClassName('virtualList___noLef');
       this.observer.observe($('.scamming-root')[0], { subtree: true, childList: true });
     }
