@@ -1143,7 +1143,7 @@
 
     _refreshTarget(element) {
       const $crimeOption = $(element);
-      const $email = $crimeOption.find('span.email___gVRXx');
+      const $email = $crimeOption.find('span.email___ga8BY');
       const email = $email.text();
       const target = Object.values(this.store.data.targets).find((x) => x.email === email);
       if (!target) {
@@ -1192,7 +1192,7 @@
       const lifetime = formatLifetime(target.expire - now);
       $email.before(`<span class="cm-sc-info ${lifetime.color}">${lifetime.text}</div>`);
       // scale
-      const $cells = $crimeOption.find('.cell___AfwZm');
+      const $cells = $crimeOption.find('.cell___ZwSaW');
       if ($cells.length >= 50) {
         $cells.find('.cm-sc-scale').remove();
         // Ignore cells after the first 50, which are faded out soon
