@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name        Crime Morale
 // @namespace   https://github.com/tobytorn
-// @description A comprehensive tool for Crime 2.0
-// @author      tobytorn [1617955]
+// @description A comprehensive tool for Crime 2.0 (mnuck fork of tobytorn's Crime Morale)
+// @author      tobytorn [1617955], WillieMcCoy [2048015] (fork)
 // @match       https://www.torn.com/loader.php?sid=crimes*
 // @match       https://www.torn.com/page.php?sid=crimes*
 // @version     1.5.0
