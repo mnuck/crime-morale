@@ -458,6 +458,7 @@
       };
     }
     get CELL_VALUE_MAP() {
+      const csMultiplier = { 1: 1.0, 20: 1.5, 40: 2.0, 60: 2.5, 80: 3.0 }[this.targetLevel] ?? 1.0;
       return this.algo === 'merit'
         ? {
             low: 2,
@@ -473,9 +474,9 @@
             fail: 0,
           }
         : {
-            low: 0.5,
-            medium: 1.5,
-            high: 2.5,
+            low: 0.5 * csMultiplier,
+            medium: 1.5 * csMultiplier,
+            high: 2.5 * csMultiplier,
             fail: -20, // The penalty should be -10. I add a bit to it for demoralization and chain bonus lost.
           };
     }
@@ -759,6 +760,13 @@
     }
     constructor() {
       this.data = getValue('scamming', {});
+      const SOLUTION_VERSION = 2;
+      if (this.data.solutionVersion !== SOLUTION_VERSION) {
+        for (const target of Object.values(this.data.targets ?? {})) {
+          target.solution = null;
+        }
+        this.data.solutionVersion = SOLUTION_VERSION;
+      }
       this.data.targets = this.data.targets ?? {};
       this.data.farms = this.data.farms ?? {};
       this.data.spams = this.data.spams ?? {};
@@ -1103,12 +1111,7 @@
         }[algo] ?? 'Score';
       const score = Math.floor(solution.value * 100);
       const scoreText = `${score}${algo === 'meritGrift' ? '%' : ''}`;
-      let scoreColor = '';
-      if (algo === 'meritGrift') {
-        scoreColor = score < 30 ? 't-red' : score < 60 ? 't-yellow' : 't-green';
-      } else {
-        scoreColor = score < 30 ? 't-red' : score < 100 ? 't-yellow' : 't-green';
-      }
+      const scoreColor = '';
       const scoreDiff = lastSolution ? score - Math.floor(lastSolution.value * 100) : 0;
       const scoreDiffColor = scoreDiff > 0 ? 't-green' : 't-red';
       const scoreDiffText = scoreDiff !== 0 ? `(${scoreDiff > 0 ? '+' : ''}${scoreDiff})` : '';
