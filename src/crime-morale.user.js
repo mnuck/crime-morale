@@ -889,6 +889,9 @@
       for (const target of Object.values(this.data.targets)) {
         if (target.expire < now) {
           delete this.data.targets[target.id];
+          // Each solver holds its whole search cache
+          delete this.solvers[target.id];
+          delete this.lastSolutions[target.id];
         }
       }
     }
@@ -1049,11 +1052,15 @@
       if (this.crimeOptions) {
         return;
       }
+      const root = $('.scamming-root')[0];
+      if (!root) {
+        return; // Not mounted yet. Stay stopped so that the next fetch tries again.
+      }
       this.crimeOptions = document.body.getElementsByClassName('crime-option');
       this.farmIcons = document.body.getElementsByClassName('scraperPhisher___lS7va');
       this.spamOptions = document.body.getElementsByClassName('optionWithLevelRequirement___CojuV');
       this.virtualLists = document.body.getElementsByClassName('virtualList___noLef');
-      this.observer.observe($('.scamming-root')[0], { subtree: true, childList: true });
+      this.observer.observe(root, { subtree: true, childList: true });
     }
 
     stop() {
@@ -1063,6 +1070,9 @@
 
     onNewData() {
       this.start();
+      if (!this.crimeOptions) {
+        return;
+      }
       for (const element of this.crimeOptions) {
         this._refreshCrimeOption(element);
       }
@@ -1194,8 +1204,10 @@
       // scale
       const $cells = $crimeOption.find('.cell___ZwSaW');
       if ($cells.length >= 50) {
-        $cells.find('.cm-sc-scale').remove();
         // Ignore cells after the first 50, which are faded out soon
+        $cells.slice(50).find('.cm-sc-scale').remove();
+        // This runs for every visible target on every fetch, so keep the 50 labels and only touch
+        // the ones that changed.
         for (let i = 0; i < 50; i++) {
           const dist = i - target.pip;
           const label = dist % 5 !== 0 || dist === 0 || dist < -5 ? '' : dist % 10 === 0 ? (dist / 10).toString() : "'";
@@ -1204,7 +1216,9 @@
             $scale = $('<div class="cm-sc-scale"></div>');
             $cells.eq(i).append($scale);
           }
-          $scale.text(label);
+          if ($scale.text() !== label) {
+            $scale.text(label);
+          }
         }
       }
       // multiplier
