@@ -1317,7 +1317,11 @@
         const crimeType = params.get('typeID') ?? reqBody?.get('typeID');
         if (url.pathname === '/page.php' && params.get('sid') === 'crimesData' && crimeType) {
           const clonedRsp = rsp.clone();
-          await onCrimeData(crimeType, await clonedRsp.json());
+          try {
+            await onCrimeData(crimeType, await clonedRsp.json());
+          } catch (err) {
+            console.error('Crime Morale failed to handle crime data', err);
+          }
         }
       } catch {
         // ignore
