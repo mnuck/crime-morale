@@ -425,106 +425,60 @@
     pickpocketingExitOb = null;
   }
 
+  // Scamming solver tables. The solver reads these in its innermost loop, so they are built once here
+  // instead of on every access.
+  const SC_ACTIONS = ['strong', 'soft', 'back', 'capitalize', 'abandon', 'resolve', 'fail'];
+  const SC_CAPITALIZE = 3;
+  const SC_ABANDON = 4;
+  const SC_RESOLVE = 5;
+  const SC_FAIL = 6;
+  const SC_HESITATION = 1;
+  const SC_CONCERN = 2;
+  const SC_SAFE_CELLS = new Set(['neutral', 'low', 'medium', 'high', 'temptation']);
+  const SC_MERIT_FLAGS = { temptation: 1, sensitivity: 2, hesitation: 4, concern: 8 };
+  const SC_MERIT_REQUIREMENT = 0xf;
+  const SC_FAILURE_COST = { 1: 1, 20: 1, 40: 1, 60: 0.5, 80: 0.33 };
+  const SC_CS_MULTIPLIER = { 1: 1.0, 20: 1.5, 40: 2.0, 60: 2.5, 80: 3.0 };
+  const SC_CONCERN_SUCCESS_RATE = {
+    'young adult': 0.55,
+    'middle-aged': 0.5,
+    senior: 0.45,
+    professional: 0.4,
+    affluent: 0.35,
+    '': 0.5,
+  };
+  const SC_PREDEFINED_SUSPICION = [0, 0, 0, 0, 2, 5, 8, 11, 16, 23, 34, 50];
+  // prettier-ignore
+  const SC_DISPLACEMENT = {
+    1: {
+      strong: [[10, 19], [15, 29], [18, 35], [21, 39], [22, 42], [23, 44]],
+      soft: [[3, 7], [5, 11], [6, 13], [6, 14], [7, 15], [7, 16]],
+      back: [[-4, -2], [-6, -3], [-7, -4], [-8, -4], [-9, -4], [-9, -5]],
+    },
+    20: {
+      strong: [[8, 15], [12, 23], [15, 28], [16, 31], [18, 33], [18, 35]],
+      soft: [[3, 7], [5, 11], [6, 13], [6, 14], [7, 15], [7, 16]],
+      back: [[-4, -2], [-6, -3], [-7, -4], [-8, -4], [-9, -4], [-9, -5]],
+    },
+    40: {
+      strong: [[7, 13], [11, 20], [13, 24], [14, 27], [15, 29], [16, 30]],
+      soft: [[3, 6], [5, 9], [6, 11], [6, 12], [7, 13], [7, 14]],
+      back: [[-4, -2], [-6, -3], [-7, -4], [-8, -4], [-9, -4], [-9, -5]],
+    },
+    60: {
+      strong: [[6, 11], [9, 17], [11, 20], [12, 23], [13, 24], [14, 25]],
+      soft: [[2, 4], [3, 6], [4, 7], [4, 8], [4, 9], [5, 9]],
+      back: [[-4, -2], [-6, -3], [-7, -4], [-8, -4], [-9, -4], [-9, -5]],
+    },
+    80: {
+      strong: [[5, 9], [8, 14], [9, 17], [10, 19], [11, 20], [12, 21]],
+      soft: [[2, 3], [3, 5], [4, 6], [4, 6], [4, 7], [5, 7]],
+      back: [[-3, -2], [-5, -3], [-6, -4], [-6, -4], [-7, -4], [-7, -5]],
+    },
+  };
+
   // Maximize extra exp (capitalization exp - total cost)
   class ScammingSolver {
-    get BASE_ACTION_COST() {
-      return this.algo === 'meritGrift' ? 0.001 : 0.02;
-    }
-    get FAILURE_COST_MAP() {
-      return this.algo === 'merit' || this.algo === 'meritGrift'
-        ? {
-            1: 0,
-            20: 0,
-            40: 0,
-            60: 0,
-            80: 0,
-          }
-        : {
-            1: 1,
-            20: 1,
-            40: 1,
-            60: 0.5,
-            80: 0.33,
-          };
-    }
-    get CONCERN_SUCCESS_RATE_MAP() {
-      return {
-        'young adult': 0.55,
-        'middle-aged': 0.5,
-        senior: 0.45,
-        professional: 0.4,
-        affluent: 0.35,
-        '': 0.5,
-      };
-    }
-    get CELL_VALUE_MAP() {
-      const csMultiplier = { 1: 1.0, 20: 1.5, 40: 2.0, 60: 2.5, 80: 3.0 }[this.targetLevel] ?? 1.0;
-      return this.algo === 'merit'
-        ? {
-            low: 2,
-            medium: 2,
-            high: 2,
-            fail: -20,
-          }
-        : this.algo === 'meritGrift'
-        ? {
-            low: 0,
-            medium: 1,
-            high: 1,
-            fail: 0,
-          }
-        : {
-            low: 0.5 * csMultiplier,
-            medium: 1.5 * csMultiplier,
-            high: 2.5 * csMultiplier,
-            fail: -20, // The penalty should be -10. I add a bit to it for demoralization and chain bonus lost.
-          };
-    }
-    get SAFE_CELL_SET() {
-      return new Set(['neutral', 'low', 'medium', 'high', 'temptation']);
-    }
-    get DISPLACEMENT() {
-      // prettier-ignore
-      return {
-        1: {
-          strong: [[10, 19], [15, 29], [18, 35], [21, 39], [22, 42], [23, 44]],
-          soft: [[3, 7], [5, 11], [6, 13], [6, 14], [7, 15], [7, 16]],
-          back: [[-4, -2], [-6, -3], [-7, -4], [-8, -4], [-9, -4], [-9, -5]],
-        },
-        20: {
-          strong: [[8, 15], [12, 23], [15, 28], [16, 31], [18, 33], [18, 35]],
-          soft: [[3, 7], [5, 11], [6, 13], [6, 14], [7, 15], [7, 16]],
-          back: [[-4, -2], [-6, -3], [-7, -4], [-8, -4], [-9, -4], [-9, -5]],
-        },
-        40: {
-          strong: [[7, 13], [11, 20], [13, 24], [14, 27], [15, 29], [16, 30]],
-          soft: [[3, 6], [5, 9], [6, 11], [6, 12], [7, 13], [7, 14]],
-          back: [[-4, -2], [-6, -3], [-7, -4], [-8, -4], [-9, -4], [-9, -5]],
-        },
-        60: {
-          strong: [[6, 11], [9, 17], [11, 20], [12, 23], [13, 24], [14, 25]],
-          soft: [[2, 4], [3, 6], [4, 7], [4, 8], [4, 9], [5, 9]],
-          back: [[-4, -2], [-6, -3], [-7, -4], [-8, -4], [-9, -4], [-9, -5]],
-        },
-        80: {
-          strong: [[5, 9], [8, 14], [9, 17], [10, 19], [11, 20], [12, 21]],
-          soft: [[2, 3], [3, 5], [4, 6], [4, 6], [4, 7], [5, 7]],
-          back: [[-3, -2], [-5, -3], [-6, -4], [-6, -4], [-7, -4], [-7, -5]],
-        },
-      };
-    }
-    get MERIT_MASK_MAP() {
-      return {
-        temptation: 1n << 50n,
-        sensitivity: 1n << 51n,
-        hesitation: 1n << 52n,
-        concern: 1n << 53n,
-      };
-    }
-    get MERIT_REQUIREMENT_MASK() {
-      return 0xfn << 50n;
-    }
-
     /**
      * @param {'exp' | 'merit' | 'meritGrift'} algo
      * @param {('neutral' | 'low' | 'medium' | 'high' | 'temptation' | 'sensitivity' | 'hesitation' | 'concern' | 'fail')[]} bar
@@ -537,193 +491,330 @@
       this.algo = algo;
       this.bar = bar;
       this.targetLevel = targetLevel;
-      this.failureCost = this.FAILURE_COST_MAP[this.targetLevel];
       this.initialRound = round;
       this.initialSuspicion = suspicion;
       this.mark = mark;
 
-      this.driftArrayMap = new Map(); // (resolvingBitmap) => number[50]
-      this.dp = new Map(); // (resolvingBitmap | round) => {value: number, action: string, multi: number}[50]
+      this.isMerit = algo === 'merit';
+      this.baseActionCost = algo === 'meritGrift' ? 0.001 : 0.02;
+      this.failureCost = algo === 'exp' ? SC_FAILURE_COST[targetLevel] : 0;
+      this.concernSuccessRate = SC_CONCERN_SUCCESS_RATE[mark] ?? SC_CONCERN_SUCCESS_RATE[''];
+      this.displacement = SC_DISPLACEMENT[targetLevel];
 
-      this.resolvingMasks = new Array(50);
+      const csMultiplier = SC_CS_MULTIPLIER[targetLevel] ?? 1.0;
+      const cellValueMap =
+        algo === 'merit'
+          ? {
+              low: 2,
+              medium: 2,
+              high: 2,
+              fail: -20,
+            }
+          : algo === 'meritGrift'
+          ? {
+              low: 0,
+              medium: 1,
+              high: 1,
+              fail: 0,
+            }
+          : {
+              low: 0.5 * csMultiplier,
+              medium: 1.5 * csMultiplier,
+              high: 2.5 * csMultiplier,
+              fail: -20, // The penalty should be -10. I add a bit to it for demoralization and chain bonus lost.
+            };
+      this.failValue = cellValueMap.fail;
+
+      // Per-pip lookups, so the hot loop never compares cell-name strings.
+      this.cellValue = Float64Array.from(bar, (cell) => cellValueMap[cell] ?? 0);
+      this.isFail = Uint8Array.from(bar, (cell) => (cell === 'fail' ? 1 : 0));
+      this.isUnsafe = Uint8Array.from(bar, (cell) => (SC_SAFE_CELLS.has(cell) ? 0 : 1));
+      this.meritFlag = Uint8Array.from(bar, (cell) => SC_MERIT_FLAGS[cell] ?? 0);
+      this.zoneKind = Uint8Array.from(bar, (cell) =>
+        cell === 'hesitation' ? SC_HESITATION : cell === 'concern' ? SC_CONCERN : 0,
+      );
+
+      // The search only ever resolves a whole hesitation/concern zone at once, so a state needs one bit
+      // per zone (plus 4 merit flags above them) rather than one bit per pip.
+      this.zoneOf = new Int8Array(50).fill(-1);
+      this.zonePipMasks = []; // bigint, to translate the per-pip bitmap the store keeps
+      const zoneCells = [];
       for (let pip = 0; pip < 50; pip++) {
-        if (this.resolvingMasks[pip]) {
+        if (this.zoneKind[pip] === 0) {
           continue;
         }
-        if (this.bar[pip] !== 'hesitation' && this.bar[pip] !== 'concern') {
-          this.resolvingMasks[pip] = 0n;
-          continue;
+        if (pip === 0 || bar[pip - 1] !== bar[pip]) {
+          zoneCells.push(bar[pip]);
+          this.zonePipMasks.push(0n);
         }
-        let mask = this.algo === 'merit' ? this.MERIT_MASK_MAP[this.bar[pip]] : 0n;
-        for (let endPip = pip; endPip < 50 && this.bar[endPip] === this.bar[pip]; endPip++) {
-          mask += 1n << BigInt(endPip);
-        }
-        for (let endPip = pip; endPip < 50 && this.bar[endPip] === this.bar[pip]; endPip++) {
-          this.resolvingMasks[endPip] = mask;
-        }
+        const zone = zoneCells.length - 1;
+        this.zoneOf[pip] = zone;
+        this.zonePipMasks[zone] |= 1n << BigInt(pip);
       }
-    }
+      this.zoneCount = zoneCells.length;
+      this.zoneBits = (1 << this.zoneCount) - 1;
+      this.zoneMasks = zoneCells.map(
+        (cell, zone) => (1 << zone) | (this.isMerit ? SC_MERIT_FLAGS[cell] << this.zoneCount : 0),
+      );
+      this.meritRequirement = SC_MERIT_REQUIREMENT << this.zoneCount;
+      this.stateSize = 2 ** (this.zoneCount + 4);
 
-    /**
-     * @param {number} driftBitmap 1 for temptation triggered, 2 for sensitivity triggered
-     */
-    solve(round, pip, resolvingBitmap, multiplierUsed, driftBitmap) {
-      if (this.algo === 'merit') {
-        for (let pip = 0; pip < 50; pip++) {
-          if (this._isResolved(pip, resolvingBitmap)) {
-            resolvingBitmap |= this.MERIT_MASK_MAP[this.bar[pip]] ?? 0n;
-          }
-        }
-        resolvingBitmap |= BigInt(driftBitmap) << 50n;
-      }
-      const result = this._visit(round - multiplierUsed, resolvingBitmap, multiplierUsed, pip);
-      return result[pip];
+      this.strayBitmap = null; // resolved pips that are not a whole zone
+      this.strayResolved = new Uint8Array(50);
+      this.zoneStateMap = new Map(); // (zone bits) => {resolved: Uint8Array(50), drift: Uint8Array(50)}
+      this.dp = new Map(); // (round * stateSize + state) => {value: Float64Array(50), action, multi: Uint8Array(50)}
+      this.landingValue = new Float64Array(50);
+      this.landingPrefix = new Float64Array(51);
     }
 
     /**
      * @param {number} round
+     * @param {number} pip
      * @param {bigint} resolvingBitmap
-     * @param {number} minMulti
-     * @param {number | undefined} singlePip
+     * @param {number} multiplierUsed
+     * @param {number} driftBitmap 1 for temptation triggered, 2 for sensitivity triggered
      */
-    _visit(round, resolvingBitmap, minMulti, singlePip = undefined) {
-      const dpKey = BigInt(round) | (resolvingBitmap << 6n);
-      // Cached solutions do not respect `minMulti`.
-      if (minMulti === 0) {
-        const visited = this.dp.get(dpKey);
-        if (visited) {
-          return visited;
+    solve(round, pip, resolvingBitmap, multiplierUsed, driftBitmap) {
+      const pipBitmap = resolvingBitmap & ((1n << 50n) - 1n);
+      let state = 0;
+      let strayBitmap = pipBitmap;
+      for (let zone = 0; zone < this.zoneCount; zone++) {
+        const mask = this.zonePipMasks[zone];
+        if ((pipBitmap & mask) === mask) {
+          state |= 1 << zone;
+          strayBitmap &= ~mask;
         }
       }
-      const result = new Array(50);
-      this.dp.set(dpKey, result);
-      if (this._estimateSuspicion(round) >= 50) {
-        for (let pip = 0; pip < 50; pip++) {
-          result[pip] = this._getCellResult(pip, resolvingBitmap);
+      if (strayBitmap !== this.strayBitmap) {
+        // Everything cached depends on these pips, so start over.
+        this.strayBitmap = strayBitmap;
+        for (let i = 0; i < 50; i++) {
+          this.strayResolved[i] = (strayBitmap >> BigInt(i)) & 1n ? 1 : 0;
         }
-        return result;
+        this.zoneStateMap.clear();
+        this.dp.clear();
       }
-      const driftArray = this._getDriftArray(resolvingBitmap);
-      const [pipBegin, pipEnd] = singlePip !== undefined ? [singlePip, singlePip + 1] : [0, 50];
-      for (let pip = pipBegin; pip < pipEnd; pip++) {
-        const best = this._getCellResult(pip, resolvingBitmap);
-        if (this.bar[pip] === 'fail') {
-          result[pip] = best;
-          continue;
-        }
-        if (!this._isResolved(pip, resolvingBitmap)) {
-          if (this.bar[pip] === 'hesitation') {
-            const resolvedResult = this._visit(round, resolvingBitmap | this.resolvingMasks[pip], 0);
-            result[pip] = resolvedResult[pip];
-            continue;
-          }
-          if (this.bar[pip] === 'concern') {
-            const resolvedResult = this._visit(round + 1, resolvingBitmap | this.resolvingMasks[pip], 0);
-            const unresolvedResult = this._visit(round + 1, resolvingBitmap, 0);
-            const concernSuccessRate = this.CONCERN_SUCCESS_RATE_MAP[this.mark] ?? this.CONCERN_SUCCESS_RATE_MAP[''];
-            const value =
-              resolvedResult[pip].value * concernSuccessRate +
-              (unresolvedResult[pip].value - this.failureCost) * (1 - concernSuccessRate) -
-              this.BASE_ACTION_COST;
-            result[pip] = {
-              value: Math.max(0, value),
-              action: value > 0 ? 'resolve' : 'abandon',
-              multi: 0,
-            };
-            continue;
+      if (this.isMerit) {
+        let flags = driftBitmap & 3;
+        for (let i = 0; i < 50; i++) {
+          if ((pipBitmap >> BigInt(i)) & 1n) {
+            flags |= this.meritFlag[i];
           }
         }
-        for (let multi = minMulti; multi <= 5; multi++) {
-          const suspicionAfterMulti = this._estimateSuspicion(round + multi);
-          const nextRoundResult = this._visit(round + multi + 1, resolvingBitmap, 0);
-          const feasibleActions = pip > 0 ? ['strong', 'soft', 'back'] : ['strong', 'soft'];
-          for (const action of feasibleActions) {
-            const displacementArray = this.DISPLACEMENT[this.targetLevel.toString()]?.[action]?.[multi];
-            if (!displacementArray) {
-              continue;
-            }
-            const [minDisplacement, maxDisplacement] = displacementArray;
-            let totalValue = 0;
-            for (let disp = minDisplacement; disp <= maxDisplacement; disp++) {
-              const landingPip = Math.max(Math.min(pip + disp, 49), 0);
-              const newPip = driftArray[landingPip];
-              if (landingPip < suspicionAfterMulti || newPip < suspicionAfterMulti) {
-                totalValue += this.CELL_VALUE_MAP.fail;
-              } else {
-                if (!this.SAFE_CELL_SET.has(this.bar[landingPip]) && !this._isResolved(landingPip, resolvingBitmap)) {
-                  totalValue -= this.failureCost;
-                }
-                totalValue -= this.BASE_ACTION_COST;
-                const landingResult =
-                  this.algo === 'merit' && newPip !== landingPip
-                    ? this._visit(round + multi + 1, resolvingBitmap | this.MERIT_MASK_MAP[this.bar[landingPip]], 0)
-                    : nextRoundResult;
-                totalValue += landingResult[newPip].value;
-              }
-            }
-            const avgValue = totalValue / (maxDisplacement - minDisplacement + 1) - this.BASE_ACTION_COST * multi;
-            if (avgValue > best.value) {
-              best.value = avgValue;
-              best.action = action;
-              best.multi = multi;
-            }
-          }
-        }
-        result[pip] = best;
+        state |= flags << this.zoneCount;
+      }
+      // A result restricted by `multiplierUsed` covers one pip and ignores smaller multipliers, so it must
+      // not go through the cache.
+      const result =
+        multiplierUsed === 0
+          ? this._visit(round, state)
+          : this._compute(round - multiplierUsed, state, multiplierUsed, pip, pip + 1);
+      return { value: result.value[pip], action: SC_ACTIONS[result.action[pip]], multi: result.multi[pip] };
+    }
+
+    /**
+     * @param {number} round
+     * @param {number} state
+     */
+    _visit(round, state) {
+      const dpKey = round * this.stateSize + state;
+      let result = this.dp.get(dpKey);
+      if (!result) {
+        result = this._compute(round, state, 0, 0, 50);
+        this.dp.set(dpKey, result);
       }
       return result;
     }
 
-    _getDriftArray(resolvingBitmap) {
-      const cached = this.driftArrayMap.get(resolvingBitmap);
+    /**
+     * @param {number} round
+     * @param {number} state
+     * @param {number} minMulti
+     * @param {number} pipBegin
+     * @param {number} pipEnd
+     */
+    _compute(round, state, minMulti, pipBegin, pipEnd) {
+      const value = new Float64Array(50);
+      const action = new Uint8Array(50);
+      const multi = new Uint8Array(50);
+      const result = { value, action, multi };
+      const isOver = this._estimateSuspicion(round) >= 50;
+      if (isOver) {
+        [pipBegin, pipEnd] = [0, 50];
+      }
+      const isMeritDone = !this.isMerit || (state & this.meritRequirement) === this.meritRequirement;
+      for (let pip = pipBegin; pip < pipEnd; pip++) {
+        const cellValue = isMeritDone ? this.cellValue[pip] : Math.min(this.cellValue[pip], 0);
+        value[pip] = cellValue;
+        action[pip] = this.isFail[pip] ? SC_FAIL : cellValue > 0 ? SC_CAPITALIZE : SC_ABANDON;
+      }
+      if (isOver) {
+        return result;
+      }
+
+      const { resolved, drift } = this._getZoneState(state & this.zoneBits);
+      const { baseActionCost, failureCost } = this;
+      const isOpen = new Uint8Array(50); // pips that still have to pick a response below
+      let hasOpen = false;
+      for (let pip = pipBegin; pip < pipEnd; pip++) {
+        if (this.isFail[pip]) {
+          continue;
+        }
+        if (!resolved[pip] && this.zoneKind[pip] !== 0) {
+          const resolvedState = state | this.zoneMasks[this.zoneOf[pip]];
+          if (this.zoneKind[pip] === SC_HESITATION) {
+            const resolvedResult = this._visit(round, resolvedState);
+            value[pip] = resolvedResult.value[pip];
+            action[pip] = resolvedResult.action[pip];
+            multi[pip] = resolvedResult.multi[pip];
+          } else {
+            const resolvedResult = this._visit(round + 1, resolvedState);
+            const unresolvedResult = this._visit(round + 1, state);
+            const concernValue =
+              resolvedResult.value[pip] * this.concernSuccessRate +
+              (unresolvedResult.value[pip] - failureCost) * (1 - this.concernSuccessRate) -
+              baseActionCost;
+            value[pip] = Math.max(0, concernValue);
+            action[pip] = concernValue > 0 ? SC_RESOLVE : SC_ABANDON;
+          }
+          continue;
+        }
+        isOpen[pip] = 1;
+        hasOpen = true;
+      }
+      if (!hasOpen || !this.displacement) {
+        return result;
+      }
+
+      const { landingValue, landingPrefix, isUnsafe, meritFlag, failValue } = this;
+      for (let m = minMulti; m <= 5; m++) {
+        const suspicionAfterMulti = this._estimateSuspicion(round + m);
+        // Every recursive visit for this multiplier happens before the shared landing buffers are
+        // filled, so a nested call cannot overwrite them.
+        const nextRound = this._visit(round + m + 1, state).value;
+        let nextRoundTemptation = nextRound;
+        let nextRoundSensitivity = nextRound;
+        if (this.isMerit) {
+          for (let landingPip = suspicionAfterMulti; landingPip < 50; landingPip++) {
+            if (drift[landingPip] === landingPip || drift[landingPip] < suspicionAfterMulti) {
+              continue;
+            }
+            const flag = meritFlag[landingPip];
+            if (flag === SC_MERIT_FLAGS.temptation && nextRoundTemptation === nextRound) {
+              nextRoundTemptation = this._visit(round + m + 1, state | (flag << this.zoneCount)).value;
+            }
+            if (flag === SC_MERIT_FLAGS.sensitivity && nextRoundSensitivity === nextRound) {
+              nextRoundSensitivity = this._visit(round + m + 1, state | (flag << this.zoneCount)).value;
+            }
+          }
+        }
+
+        // What landing on each pip is worth depends only on that pip, not on where the move started.
+        // Tabulate it once with prefix sums, and every (pip, action) below is a window sum.
+        landingPrefix[0] = 0;
+        for (let landingPip = 0; landingPip < 50; landingPip++) {
+          const newPip = drift[landingPip];
+          let v;
+          if (landingPip < suspicionAfterMulti || newPip < suspicionAfterMulti) {
+            v = failValue;
+          } else {
+            const landingResult =
+              newPip === landingPip
+                ? nextRound
+                : meritFlag[landingPip] === SC_MERIT_FLAGS.temptation
+                ? nextRoundTemptation
+                : nextRoundSensitivity;
+            v = landingResult[newPip] - baseActionCost;
+            if (isUnsafe[landingPip] && !resolved[landingPip]) {
+              v -= failureCost;
+            }
+          }
+          landingValue[landingPip] = v;
+          landingPrefix[landingPip + 1] = landingPrefix[landingPip] + v;
+        }
+
+        // Index in this array is the action index in SC_ACTIONS.
+        const displacementArrays = [this.displacement.strong[m], this.displacement.soft[m], this.displacement.back[m]];
+        for (let pip = pipBegin; pip < pipEnd; pip++) {
+          if (!isOpen[pip]) {
+            continue;
+          }
+          const feasibleActionCount = pip > 0 ? 3 : 2;
+          for (let a = 0; a < feasibleActionCount; a++) {
+            const [minDisplacement, maxDisplacement] = displacementArrays[a];
+            let minLanding = pip + minDisplacement;
+            let maxLanding = pip + maxDisplacement;
+            // Landings past either end of the bar stop on the end pip.
+            let totalValue = 0;
+            if (minLanding < 0) {
+              totalValue += (Math.min(maxLanding, -1) - minLanding + 1) * landingValue[0];
+              minLanding = 0;
+            }
+            if (maxLanding > 49) {
+              totalValue += (maxLanding - Math.max(minLanding, 50) + 1) * landingValue[49];
+              maxLanding = 49;
+            }
+            if (minLanding <= maxLanding) {
+              totalValue += landingPrefix[maxLanding + 1] - landingPrefix[minLanding];
+            }
+            const avgValue = totalValue / (maxDisplacement - minDisplacement + 1) - baseActionCost * m;
+            if (avgValue > value[pip]) {
+              value[pip] = avgValue;
+              action[pip] = a;
+              multi[pip] = m;
+            }
+          }
+        }
+      }
+      return result;
+    }
+
+    /**
+     * @param {number} zoneState the zone bits of a state
+     */
+    _getZoneState(zoneState) {
+      const cached = this.zoneStateMap.get(zoneState);
       if (cached) {
         return cached;
       }
-      const driftArray = new Array(50);
-      this.driftArrayMap.set(resolvingBitmap, driftArray);
+      const resolved = new Uint8Array(50);
+      for (let pip = 0; pip < 50; pip++) {
+        const zone = this.zoneOf[pip];
+        resolved[pip] = this.strayResolved[pip] || (zone >= 0 && (zoneState >> zone) & 1) ? 1 : 0;
+      }
+      const drift = new Uint8Array(50);
       for (let pip = 0; pip < 50; pip++) {
         let newPip = pip;
         switch (this.bar[pip]) {
           case 'temptation':
             while (
               newPip + 1 < 50 &&
-              (!this.SAFE_CELL_SET.has(this.bar[newPip]) || this.bar[newPip] === 'temptation') &&
-              !this._isResolved(newPip, resolvingBitmap)
+              (this.isUnsafe[newPip] || this.bar[newPip] === 'temptation') &&
+              !resolved[newPip]
             ) {
               newPip++;
             }
             break;
           case 'sensitivity':
-            while (newPip > 0 && this.bar[newPip] !== 'neutral' && !this._isResolved(newPip, resolvingBitmap)) {
+            while (newPip > 0 && this.bar[newPip] !== 'neutral' && !resolved[newPip]) {
               newPip--;
             }
             break;
         }
-        driftArray[pip] = newPip;
+        drift[pip] = newPip;
       }
-      return driftArray;
-    }
-
-    _getCellResult(pip, resolvingBitmap) {
-      let value = this.CELL_VALUE_MAP[this.bar[pip]] ?? 0;
-      if (this.algo === 'merit' && (resolvingBitmap & this.MERIT_REQUIREMENT_MASK) !== this.MERIT_REQUIREMENT_MASK) {
-        value = Math.min(value, 0);
-      }
-      const action = this.bar[pip] === 'fail' ? 'fail' : value > 0 ? 'capitalize' : 'abandon';
-      return { value, action, multi: 0 };
+      const zoneStateInfo = { resolved, drift };
+      this.zoneStateMap.set(zoneState, zoneStateInfo);
+      return zoneStateInfo;
     }
 
     _estimateSuspicion(round) {
       if (round <= this.initialRound) {
         return this.initialSuspicion;
       }
-      const predefined = [0, 0, 0, 0, 2, 5, 8, 11, 16, 23, 34, 50][round] ?? 50;
+      const predefined = SC_PREDEFINED_SUSPICION[round] ?? 50;
       const current = Math.floor(this.initialSuspicion * 1.5 ** (round - this.initialRound));
       return Math.max(predefined, current);
-    }
-
-    _isResolved(pip, resolvingBitmap) {
-      return ((1n << BigInt(pip)) & resolvingBitmap) !== 0n;
     }
   }
 
