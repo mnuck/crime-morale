@@ -10,11 +10,11 @@
 // @grant       GM_setValue
 // @grant       unsafeWindow
 // @run-at      document-start
-// @supportURL  https://github.com/tobytorn/crime-morale
+// @supportURL  https://github.com/mnuck/crime-morale
 // @license     MIT
 // @require     https://unpkg.com/jquery@3.7.0/dist/jquery.min.js
-// @downloadURL https://update.greasyfork.org/scripts/515557/Crime%20Morale.user.js
-// @updateURL   https://update.greasyfork.org/scripts/515557/Crime%20Morale.meta.js
+// @downloadURL https://raw.githubusercontent.com/mnuck/crime-morale/master/src/crime-morale.user.js
+// @updateURL   https://raw.githubusercontent.com/mnuck/crime-morale/master/src/crime-morale.user.js
 // ==/UserScript==
 
 (function () {
