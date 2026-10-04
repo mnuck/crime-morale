@@ -10,7 +10,7 @@
 // @grant       GM_setValue
 // @grant       unsafeWindow
 // @run-at      document-start
-// @supportURL  https://github.com/tobytorn/crime-morale
+// @supportURL  https://github.com/mnuck/crime-morale
 // @license     MIT
 // @require     https://unpkg.com/jquery@3.7.0/dist/jquery.min.js
 // @downloadURL https://raw.githubusercontent.com/mnuck/crime-morale/master/src/crime-morale.user.js
