@@ -5,7 +5,7 @@
 // @author      tobytorn [1617955], WillieMcCoy [2048015] (fork)
 // @match       https://www.torn.com/loader.php?sid=crimes*
 // @match       https://www.torn.com/page.php?sid=crimes*
-// @version     1.5.0
+// @version     1.5.1
 // @grant       GM_getValue
 // @grant       GM_setValue
 // @grant       unsafeWindow
