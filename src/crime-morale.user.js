@@ -62,6 +62,13 @@
     style.appendChild(document.createTextNode(css));
   }
 
+  // Torn's CSS-module class names end in a build hash that changes without notice (e.g. email___ga8BY).
+  // Match on the stable prefix instead. Returns an iterable that re-queries on every iteration,
+  // like the live collection from getElementsByClassName.
+  function liveSelector(selector) {
+    return { [Symbol.iterator]: () => document.body.querySelectorAll(selector)[Symbol.iterator]() };
+  }
+
   function formatLifetime(seconds) {
     const hours = Math.floor(seconds / 3600);
     const text =
@@ -174,7 +181,7 @@
         return this.properties.find((x) => x.subID === savedId);
       }
       const $item = $crimeOption.closest('.virtual-item');
-      if ($item.prev().hasClass('lastOfGroup___YNUeQ')) {
+      if ($item.prev().is('[class*="lastOfGroup___"]')) {
         return this.properties[0];
       }
       let prevId = undefined;
@@ -211,11 +218,11 @@
     }
 
     _getCrimeOptionTitle($crimeOption) {
-      const mobileTitle = $crimeOption.find('.title___kOWyb').text();
+      const mobileTitle = $crimeOption.find('[class*="title___"]').first().text();
       if (mobileTitle !== '') {
         return { title: mobileTitle, titleType: 'mobileTitle' };
       }
-      const textNode = $crimeOption.find('.crimeOptionSection___hslpu')[0]?.firstChild;
+      const textNode = $crimeOption.find('[class*="crimeOptionSection___"]')[0]?.firstChild;
       if (textNode?.nodeType === Node.TEXT_NODE) {
         return { title: textNode.textContent, titleType: 'title' };
       }
@@ -1108,6 +1115,7 @@
       this.farmIcons = null;
       this.spamOptions = null;
       this.virtualLists = null;
+      this.rootTimer = null;
       this.observer = new MutationObserver((mutations) => {
         const isAdd = mutations.some((mutation) => {
           for (const added of mutation.addedNodes) {
@@ -1156,20 +1164,47 @@
         return; // Not mounted yet. Stay stopped so that the next fetch tries again.
       }
       this.crimeOptions = document.body.getElementsByClassName('crime-option');
-      this.farmIcons = document.body.getElementsByClassName('scraperPhisher___lS7va');
-      this.spamOptions = document.body.getElementsByClassName('optionWithLevelRequirement___CojuV');
-      this.virtualLists = document.body.getElementsByClassName('virtualList___noLef');
+      this.farmIcons = liveSelector('[class*="scraperPhisher___"]');
+      this.spamOptions = liveSelector('[class*="optionWithLevelRequirement___"]');
+      this.virtualLists = liveSelector('[class*="virtualList___"]');
       this.observer.observe(root, { subtree: true, childList: true });
     }
 
     stop() {
       this.crimeOptions = null;
       this.observer.disconnect();
+      this._cancelRootWait();
+    }
+
+    // The crime data response can arrive before Torn has mounted .scamming-root, and no further
+    // fetch follows until the player acts. Poll briefly for the root, then run the normal pass.
+    _waitForRoot() {
+      if (this.rootTimer) {
+        return;
+      }
+      let tries = 0;
+      this.rootTimer = setInterval(() => {
+        tries++;
+        if ($('.scamming-root')[0]) {
+          this._cancelRootWait();
+          this.onNewData();
+        } else if (tries >= 100) {
+          this._cancelRootWait();
+        }
+      }, 200);
+    }
+
+    _cancelRootWait() {
+      if (this.rootTimer) {
+        clearInterval(this.rootTimer);
+        this.rootTimer = null;
+      }
     }
 
     onNewData() {
       this.start();
       if (!this.crimeOptions) {
+        this._waitForRoot();
         return;
       }
       for (const element of this.crimeOptions) {
@@ -1247,7 +1282,7 @@
 
     _refreshTarget(element) {
       const $crimeOption = $(element);
-      const $email = $crimeOption.find('span.email___ga8BY');
+      const $email = $crimeOption.find('span[class*="email___"]');
       const email = $email.text();
       const target = Object.values(this.store.data.targets).find((x) => x.email === email);
       if (!target) {
@@ -1296,7 +1331,7 @@
       const lifetime = formatLifetime(target.expire - now);
       $email.before(`<span class="cm-sc-info ${lifetime.color}">${lifetime.text}</div>`);
       // scale
-      const $cells = $crimeOption.find('.cell___ZwSaW');
+      const $cells = $crimeOption.find('[class*="cell___"]');
       if ($cells.length >= 50) {
         // Ignore cells after the first 50, which are faded out soon
         $cells.slice(50).find('.cm-sc-scale').remove();
@@ -1325,10 +1360,10 @@
 
     _refreshFarmButton(element) {
       const $element = $(element);
-      if ($element.find('.emailAddresses___ky_qG').length === 0) {
+      if ($element.find('[class*="emailAddresses___"]').length === 0) {
         return;
       }
-      $element.find('.commitButtonSection___wJfnI button').toggleClass('cm-sc-low-cash', this.store.cash < 10000);
+      $element.find('[class*="commitButtonSection___"] button').toggleClass('cm-sc-low-cash', this.store.cash < 10000);
     }
 
     _refreshFarm(element) {
@@ -1714,8 +1749,8 @@
         padding-top: 2px;
         text-align: center;
       }
-      .cm-sc-spam-option .levelLabel___LNbg8,
-      .cm-sc-spam-option .separator___C2skk {
+      .cm-sc-spam-option [class*=levelLabel___],
+      .cm-sc-spam-option [class*=separator___] {
         display: none;
       }
       .cm-sc-spam-elapsed {
